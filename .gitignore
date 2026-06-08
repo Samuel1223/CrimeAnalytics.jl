@@ -1,0 +1,7 @@
+Manifest.toml
+/.julia/
+*.cov
+*.jl.cov
+*.jl.mem
+/docs/build/
+.DS_Store
