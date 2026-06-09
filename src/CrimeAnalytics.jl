@@ -15,7 +15,7 @@ module CrimeAnalytics
 export Cell, Table,
     nrows, ncols, colnames, getcolumn,
     parse_csv, dropcols, fillmissing, dropmissing, filtereq,
-    value_counts, top_n, count_by_hour, bounding_box, accuracy
+    value_counts, top_n, count_by_hour, bounding_box, accuracy, inner_join
 
 """
     Cell
@@ -202,6 +202,24 @@ vectors must have the same, non-zero length. Throws `ArgumentError` if the
 lengths differ or if the inputs are empty.
 """
 function accuracy(predicted::AbstractVector, actual::AbstractVector)::Float64
+    error("not implemented")
+end
+
+"""
+    inner_join(left, right, key) -> Table
+
+Inner-join `left` and `right` on the shared column `key`. For every pair of a
+`left` row and a `right` row whose `key` values are equal (by `isequal`) and
+non-`missing`, emit one joined row; duplicate keys therefore produce a cartesian
+combination. Rows are ordered left-major: iterate `left`'s rows in order, and
+for each, its matching `right` rows in order.
+
+Output columns are, in order: `key`, then `left`'s other columns (original
+order), then `right`'s other columns (original order). Any `right` column whose
+name also occurs in `left` is renamed `"<name>_right"`. A `missing` key never
+matches. Throws `KeyError` if `key` is not a column of both tables.
+"""
+function inner_join(left::Table, right::Table, key::AbstractString)::Table
     error("not implemented")
 end
 
