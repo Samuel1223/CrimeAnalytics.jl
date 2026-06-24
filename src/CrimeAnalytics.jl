@@ -110,23 +110,41 @@ end
 # --------------------------------------------------------------------------
 
 """
-    parse_csv(text) -> Table
+    parse_csv(text; quoted=false) -> Table
 
 Parse CSV `text` into a [`Table`](@ref). The first non-empty line is the
-header; the remaining non-empty lines are data rows. Fields are split on commas
-(there is no quoting/escaping). A carriage return (`\\r`) is stripped from line
-ends so that CRLF input is accepted, and fully empty lines are skipped.
+header; the remaining non-empty lines are data rows. A carriage return (`\\r`)
+is stripped from line ends so that CRLF input is accepted, and fully empty
+lines are skipped.
 
-Each field is converted to a [`Cell`](@ref): an empty field becomes `missing`;
-a field that parses as an integer becomes an `Int`; otherwise a field that
-parses as a real number becomes a `Float64`; anything else is kept as a
-`String`.
+With the default `quoted == false`, fields are split on commas with no
+quoting/escaping. Each field is converted to a [`Cell`](@ref): an empty field
+becomes `missing`; a field that parses as an integer becomes an `Int`;
+otherwise a field that parses as a real number becomes a `Float64`; anything
+else is kept as a `String`.
+
+With `quoted == true`, fields are parsed using RFC-4180 quoting:
+
+- A field is *quoted* iff its first character is a double quote `"`. Inside a
+  quoted field, commas and newlines are literal content and a doubled quote
+  `""` denotes a single literal `"`; the field ends at the next lone `"`.
+- After a field's closing quote, only a comma or a record separator may follow;
+  any other character raises `ArgumentError`. A quoted field left open at the
+  end of the input raises `ArgumentError`.
+- A quoted field's value is its unescaped content kept verbatim **as a
+  `String`** — no type inference is applied and an empty quoted field `""`
+  becomes the empty string `""` (not `missing`). Unquoted fields are converted
+  exactly as in the default mode (so an unquoted empty field is still
+  `missing`).
+- A newline inside a quoted field is part of that field; records are separated
+  only by newlines outside quotes. Fully empty lines (between records) are still
+  skipped.
 
 Throws `ArgumentError` if the text has no header, if the header contains a
 duplicate column name, or if a data row does not have exactly as many fields as
 the header.
 """
-function parse_csv(text::AbstractString)::Table
+function parse_csv(text::AbstractString; quoted::Bool=false)::Table
     raw = split(replace(text, '\r' => ""), '\n')
     lines = String[]
     for ln in raw
@@ -242,10 +260,11 @@ The per-group list is produced by the following pipeline, applied in order:
    longer than `n`. When `false`, the list is cut to exactly `n`.
 5. **`rollup_other`** — when `true`, every pair that survived step 2 but was not
    kept in steps 3–4 is summed into a single synthetic pair
-   `"__other__" => total`, appended to the *end* of the kept list (after the
-   value-ascending entries, regardless of where `"__other__"` would otherwise
-   sort). Pairs discarded in step 2 are *not* included in this total, and the
-   synthetic pair is appended only when `total > 0`.
+   `"__other__" => total`. This pair is **inserted into the kept list at the
+   position that keeps the list sorted by `count` descending** (it is *not*
+   simply appended); among pairs with a count equal to `total`, the real values
+   precede `"__other__"`. Pairs discarded in step 2 are *not* included in the
+   total, and the synthetic pair is inserted only when `total > 0`.
 
 A group whose list becomes empty after step 2 is still emitted, paired with an
 empty vector.
