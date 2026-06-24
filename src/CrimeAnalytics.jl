@@ -220,17 +220,41 @@ function value_counts(t::Table, col::AbstractString)::Vector{Pair{Cell,Int}}
 end
 
 """
-    top_n(t, group_col, value_col, n) -> Vector{Pair{Cell,Vector{Pair{Cell,Int}}}}
+    top_n(t, group_col, value_col, n; min_count=1, keep_ties=false, rollup_other=false)
+        -> Vector{Pair{Cell,Vector{Pair{Cell,Int}}}}
 
 For each distinct non-`missing` value `g` of `group_col`, compute the
-[`value_counts`](@ref) of `value_col` over the rows where `group_col == g` and
-keep at most the first `n` of them. The result pairs each group `g` with its
-top-`n` `value => count` vector, and the groups are ordered by `g` ascending.
+[`value_counts`](@ref) of `value_col` over the rows where `group_col == g`, then
+reduce that `value => count` list to a per-group result. The result pairs each
+group `g` with its reduced list, and the groups are ordered by `g` ascending.
 
-`n` must be a positive integer (`ArgumentError` otherwise). Throws `KeyError`
-if either column is absent.
+The per-group list is produced by the following pipeline, applied in order:
+
+1. Start from the `value => count` pairs sorted by `count` descending, ties
+   broken by `value` ascending (exactly [`value_counts`](@ref) order).
+2. **`min_count`** — discard every pair whose `count < min_count`. With the
+   default `min_count == 1` nothing is discarded.
+3. **top-`n`** — keep the first `n` of the remaining pairs (all of them when
+   fewer than `n` remain).
+4. **`keep_ties`** — when `true`, also keep every pair immediately following the
+   `n`-th kept pair whose `count` equals that `n`-th pair's count, so values
+   tied in count are never split across the cutoff; the kept list may then be
+   longer than `n`. When `false`, the list is cut to exactly `n`.
+5. **`rollup_other`** — when `true`, every pair that survived step 2 but was not
+   kept in steps 3–4 is summed into a single synthetic pair
+   `"__other__" => total`, appended to the *end* of the kept list (after the
+   value-ascending entries, regardless of where `"__other__"` would otherwise
+   sort). Pairs discarded in step 2 are *not* included in this total, and the
+   synthetic pair is appended only when `total > 0`.
+
+A group whose list becomes empty after step 2 is still emitted, paired with an
+empty vector.
+
+`n` and `min_count` must both be positive integers (`ArgumentError` otherwise).
+Throws `KeyError` if either column is absent.
 """
-function top_n(t::Table, group_col::AbstractString, value_col::AbstractString, n::Integer)
+function top_n(t::Table, group_col::AbstractString, value_col::AbstractString, n::Integer;
+               min_count::Integer=1, keep_ties::Bool=false, rollup_other::Bool=false)
     gc = String(group_col)
     vc = String(value_col)
     haskey(t.cols, gc) || throw(KeyError(gc))
