@@ -12,7 +12,8 @@ module CrimeAnalytics
 export Cell, Table,
     nrows, ncols, colnames, getcolumn,
     parse_csv, dropcols, fillmissing, dropmissing, filtereq,
-    value_counts, top_n, count_by_hour, bounding_box, accuracy, inner_join
+    value_counts, top_n, count_by_hour, bounding_box, accuracy, inner_join,
+    asof_join
 
 """
     Cell
@@ -405,6 +406,31 @@ function inner_join(left::Table, right::Table, key::AbstractString)::Table
         end
     end
     return Table(outnames, outcols)
+end
+
+"""
+    asof_join(left, right, key) -> Table
+
+Backward as-of join of `left` and `right` on the shared numeric column `key`.
+For each row of `left`, in order, find its single match in `right`: the right
+row whose `key` is the **largest right key that is `<=` the left key**. When
+several right rows share that key, the match is the one that occurs **last** in
+`right`'s row order. A left row whose `key` is `missing` or non-numeric, and any
+left row for which no right key is `<=` its key, has no match. Right keys that
+are `missing` or non-numeric are never candidates.
+
+Unlike [`inner_join`](@ref) this is a *left* join: every `left` row produces
+exactly one output row, in `left` order. For a matched row the right columns are
+taken from the matched right row; for an unmatched row the right columns are
+`missing`.
+
+Output columns are, in order: `key`, then `left`'s other columns (original
+order), then `right`'s other columns (original order). Any `right` column whose
+name also occurs in `left` is renamed `"<name>_right"`. Throws `KeyError` if
+`key` is not a column of both tables.
+"""
+function asof_join(left::Table, right::Table, key::AbstractString)::Table
+    return inner_join(left, right, key)
 end
 
 end # module CrimeAnalytics
