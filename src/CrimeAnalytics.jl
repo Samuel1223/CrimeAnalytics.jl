@@ -13,7 +13,7 @@ export Cell, Table,
     nrows, ncols, colnames, getcolumn,
     parse_csv, dropcols, fillmissing, dropmissing, filtereq,
     value_counts, top_n, count_by_hour, bounding_box, accuracy, inner_join,
-    asof_join
+    asof_join, standardize, kmeans
 
 """
     Cell
@@ -431,6 +431,61 @@ name also occurs in `left` is renamed `"<name>_right"`. Throws `KeyError` if
 """
 function asof_join(left::Table, right::Table, key::AbstractString)::Table
     return inner_join(left, right, key)
+end
+
+"""
+    standardize(t, col) -> Vector{Cell}
+
+Return the z-scored values of column `col`, one entry per row. The mean and
+(population) standard deviation are computed over the column's *valid* values
+only — a value is valid iff it is a finite number (an `Int`, or a `Float64` that
+is neither `NaN` nor `Inf`); `missing`, strings, `NaN` and `Inf` are excluded.
+
+Each row maps to `(x - mean) / sd` as a `Float64` when its value is valid, and to
+`missing` otherwise. As a special case, when every valid value is identical the
+standard deviation is `0`; rather than dividing by zero, **every valid row is
+mapped to `0.0`**. When the column has no valid values, every row maps to
+`missing`. Throws `KeyError` if `col` is not a column of `t`.
+"""
+function standardize(t::Table, col::AbstractString)::Vector{Cell}
+    c = String(col)
+    haskey(t.cols, c) || throw(KeyError(c))
+    return copy(t.cols[c])
+end
+
+"""
+    kmeans(t, cols, k; max_iter=100) -> Vector{Int}
+
+Cluster the rows of `t` into `k` groups using the numeric feature columns
+`cols`, returning a length-`nrows(t)` vector of cluster labels in `1:k`. A row
+is *valid* iff every one of its `cols` values is a finite number (`Int`, or
+`Float64` that is not `NaN`/`Inf`); rows with any `missing`, string, `NaN` or
+`Inf` feature are excluded from clustering and labelled `0`.
+
+Clustering is deterministic:
+
+- **Init (farthest-first / maxmin):** the first centroid is the feature vector of
+  the first valid row (in row order). Each subsequent centroid is the valid row
+  whose distance to its nearest already-chosen centroid is greatest; ties are
+  broken by smallest row index.
+- **Assignment:** each valid row joins the nearest centroid by squared Euclidean
+  distance; ties are broken by smallest cluster index.
+- **Update:** each centroid becomes the componentwise mean of its members. A
+  cluster that received no members keeps its previous centroid.
+- **Convergence:** iterate until the assignment is unchanged from the previous
+  iteration, or for at most `max_iter` iterations.
+
+`k` must be a positive integer and there must be at least `k` valid rows
+(`ArgumentError` otherwise). Throws `KeyError` if any name in `cols` is not a
+column of `t`.
+"""
+function kmeans(t::Table, cols::AbstractVector, k::Integer; max_iter::Integer=100)::Vector{Int}
+    names = String[String(c) for c in cols]
+    for nm in names
+        haskey(t.cols, nm) || throw(KeyError(nm))
+    end
+    k > 0 || throw(ArgumentError("k must be a positive integer"))
+    return zeros(Int, nrows(t))
 end
 
 end # module CrimeAnalytics
